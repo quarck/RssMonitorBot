@@ -9,6 +9,8 @@ namespace RssMonitorBot
     class UserState<T>
         where T : class, new()
     {
+        private static string UsersFolder = "users";
+
         private long _userId;
 
         public T Data { get; private set; }
@@ -23,6 +25,7 @@ namespace RssMonitorBot
             return File.Exists(
                 Path.Combine(
                     Configuration.SERVER_ROOT,
+                    UsersFolder,
                     userId.ToString(),
                     typeof(T).Name
                     ));
@@ -32,6 +35,7 @@ namespace RssMonitorBot
         {
             File.Delete(Path.Combine(
                     Configuration.SERVER_ROOT,
+                    UsersFolder,
                     userId.ToString(),
                     typeof(T).Name
                     ));
@@ -45,7 +49,8 @@ namespace RssMonitorBot
                 XmlSerializer serializer = new XmlSerializer(typeof(T));
 
                 var file = Path.Combine(
-                    Configuration.SERVER_ROOT, 
+                    Configuration.SERVER_ROOT,
+                    UsersFolder,
                     userId.ToString(),
                     typeof(T).Name
                     );
@@ -81,10 +86,12 @@ namespace RssMonitorBot
             Directory.CreateDirectory(
                 Path.Combine(
                     Configuration.SERVER_ROOT,
+                    UsersFolder,
                     _userId.ToString()));
 
             var file = Path.Combine(
                     Configuration.SERVER_ROOT,
+                    UsersFolder,
                     _userId.ToString(),
                     typeof(T).Name
                     );
