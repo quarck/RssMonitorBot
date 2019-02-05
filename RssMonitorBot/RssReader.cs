@@ -14,9 +14,10 @@ namespace RssMonitorBot
     {
         private HttpClient _httpClient;
 
-        public RssReader(HttpClient client)
+        public RssReader()
         {
-            _httpClient = client;
+            _httpClient = new HttpClient();
+            _httpClient.MaxResponseContentBufferSize = 1024 * 256;
         }
 
         public async Task<RssFeed> FetchAndParse(string uri)

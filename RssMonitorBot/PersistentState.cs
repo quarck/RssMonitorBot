@@ -34,6 +34,7 @@ namespace RssMonitorBot
             }
             catch (Exception ex)
             {
+                Console.WriteLine(ex.ToString());
                 ret = null;
             }
 

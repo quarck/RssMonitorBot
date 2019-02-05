@@ -127,6 +127,7 @@ namespace Telegram
                 }
                 catch (TaskCanceledException ex)
                 {
+                    Console.WriteLine(ex.ToString()); // read aborted 
                     await Task.Delay(10 * 1000);
                 }
             }

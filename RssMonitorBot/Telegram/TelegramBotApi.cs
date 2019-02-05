@@ -12,6 +12,8 @@ namespace Telegram
 {
     class TelegramBotApi: ITelegramBotApi
     {
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         private HttpClient _httpClient = null;
 
         private static string MethodName_GetUpdates = "getUpdates";
@@ -35,7 +37,7 @@ namespace Telegram
 
         public bool VerboseLogging { get; set; } = false;
 
-        public TelegramBotApi(HttpClient client, string apiKey)
+        public TelegramBotApi(string apiKey)
         {
             BaseUriForGetUpdates = BaseUriForMethod(MethodName_GetUpdates, apiKey);
             BaseUriForGetMe = BaseUriForMethod(MethodName_GetMe, apiKey);
@@ -43,7 +45,7 @@ namespace Telegram
             BaseUriForSendContact = BaseUriForMethod(MethodName_SendContact, apiKey);
             BaseUriForGetFile = BaseUriForMethod(MethodName_GetFile, apiKey);
 
-            _httpClient = client;
+            _httpClient = new HttpClient();
             _httpClient.BaseAddress = new Uri(BaseTelegramUrl);
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(Mime_ApplicationJson));
@@ -52,8 +54,7 @@ namespace Telegram
         private async Task<TResult> DoGetMethodCall<TResult>(string uri)
             where TResult: class 
         {
-            if (VerboseLogging)
-                Console.WriteLine($"Request: {uri}");
+            logger.Debug("Executing method call {0}", uri);
 
             TResult ret = null;
             try
@@ -62,19 +63,18 @@ namespace Telegram
                 
                 if (!string.IsNullOrEmpty(resp))
                 {
-                    if (VerboseLogging)
-                        Console.WriteLine($"Raw result: {resp}");
+                    logger.Debug("Raw result: {0}", resp);
                     ret = CallResult<TResult>.FromJsonString(resp)?.Result ?? null;
                 }
-                else if (VerboseLogging)
+                else 
                 {
-                    Console.WriteLine("Empty result");
+                    logger.Warn("Got an empty result from the server");
                 }
 
             }
             catch (HttpRequestException e)
             {
-                Console.WriteLine(e.ToString());
+                logger.Warn(e, "Http Request Timeout");
             }
 
             return ret;

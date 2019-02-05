@@ -30,7 +30,7 @@ namespace Telegram
         public string Username { get; set; } // Optional 
         public string LanguageCode { get; set; } // Optional 
 
-        public string ToString()
+        public override string ToString()
         {
             string bot = IsBot ? "Bot:" : "";
             return $"{bot}{Id}, {FirstName ?? ""} {LastName ?? ""} ({Username ?? ""})";
@@ -46,7 +46,8 @@ namespace Telegram
             }
             catch (JsonSerializationException ex)
             {
-                Console.WriteLine(ex.Message);
+                var logger = NLog.LogManager.GetCurrentClassLogger();
+                logger?.Error(ex, $"Failed to parse Json: {json}");
             }
             return ret;
         }
@@ -72,7 +73,8 @@ namespace Telegram
             }
             catch (JsonSerializationException ex)
             {
-                Console.WriteLine(ex.Message);
+                var logger = NLog.LogManager.GetCurrentClassLogger();
+                logger?.Error(ex, $"Failed to parse Json: {json}");
             }
             return ret;
         }
@@ -359,7 +361,8 @@ namespace Telegram
             }
             catch (JsonSerializationException ex)
             {
-                Console.WriteLine(ex.Message);
+                var logger = NLog.LogManager.GetCurrentClassLogger();
+                logger?.Error(ex, $"Failed to parse Json: {json}");
             }
             return ret;
         }

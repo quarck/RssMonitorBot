@@ -102,7 +102,7 @@ namespace RssMonitorBot.Telegram
         {
             if (parsedCommand.Length == 2 && 
                 parsedCommand[0] == "/auth" && 
-                parsedCommand[1] == ApiKeys.BOT_SECRET_AUTH_KEY)
+                parsedCommand[1] == Configuration.BOT_SECRET)
             {
                 UserState<AuthValidFlag>.LoadOrDefault(userId).Save();
                 var r = await api.RespondToUpdate(update, $"{from.FirstName}, you are now authenticated");
