@@ -9,6 +9,8 @@ namespace Telegram
 {
     public abstract class TelegramBotCore
     {
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
         private ITelegramBotApi _api;
 
         public bool VerboseLogging { get; set; } = false;
@@ -40,11 +42,11 @@ namespace Telegram
                     try
                     {
                         RunReceiveLoop().Wait();
-                        Console.WriteLine("Recv loop done");
+                        logger.Warn("Telegram recv loop terminated");
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"recv loop done: {ex}");
+                        logger.Error(ex, "Telegram recv loop terminated");
                     }
                 });
 
@@ -55,11 +57,11 @@ namespace Telegram
                         try
                         {
                             Worker();
-                            Console.WriteLine("Worker done");
+                            logger.Warn("Worker terminated");
                         }
                         catch (Exception ex)
                         {
-                            Console.WriteLine($"worker died: {ex}");
+                            logger.Error(ex, "Worker terminated");
                         }
                     });
             }
@@ -70,7 +72,7 @@ namespace Telegram
             var me = await _api.GetMe();
             if (me != null)
             {
-                Console.WriteLine("me: {0}", me.ToJsonString());
+                logger.Info("Bot self identification: {0}", me.ToJsonString());
             }
 
             long? nextOffset = null;
@@ -93,13 +95,12 @@ namespace Telegram
                             if (update.Message == null)
                                 continue;
 
-                            if (VerboseLogging)
-                            {
-                                Telegram.User from = update.Message.From;
-                                long userId = update.Message.From.Id;
-                                string text = update.Message.Text ?? "";
-                                Console.WriteLine($"{from.ToString()}: {userId} {text}");
-                            }
+                            Telegram.User from = update.Message.From;
+                            long userId = update.Message.From.Id;
+                            string text = update.Message.Text ?? "";
+                            
+                            logger.Info($"{from.ToString()}: {userId} {text}");
+                            logger.Debug("full update: {0}", update.ToJsonString());
 
                             bool added = false;
                             lock (_queueLock)
@@ -120,14 +121,14 @@ namespace Telegram
                     }
                     else
                     {
-                        Console.WriteLine("No Updates");
+                        logger.Info("No updates");
                     }
 
                     await Task.Delay(100);
                 }
                 catch (TaskCanceledException ex)
                 {
-                    Console.WriteLine(ex.ToString()); // read aborted 
+                    logger.Error(ex, "Read task cancelled");
                     await Task.Delay(10 * 1000);
                 }
             }
