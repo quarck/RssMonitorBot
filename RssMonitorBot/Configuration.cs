@@ -8,19 +8,20 @@ namespace RssMonitorBot
 {
     static class Configuration
     {
-        public static string API_KEY = ApiKeys.TELEGRAM_API_KEY;
-        public static string SERVER_ROOT {
-            get
+        private static string GetArgN(int n, string name)
+        {
+            var args = Environment.GetCommandLineArgs();
+            if (args.Length < n+1)
             {
-                var args = Environment.GetCommandLineArgs();
-                if (args.Length < 2)
-                {
-                    Console.Error.WriteLine("Error: Give a server root at arg1");
-                    Environment.Exit(-1);
-                }
+                Console.Error.WriteLine($"Error: Give a {name} at arg{n}");
+                Environment.Exit(-1);
+            }
 
-                return args[1];
-            } 
+            return args[n];
         }
+
+        public static string SERVER_ROOT = GetArgN(1, "server root");
+        public static string API_KEY = GetArgN(2, "api key");
+        public static string BOT_SECRET = GetArgN(3, "bot secret");
     }
 }
