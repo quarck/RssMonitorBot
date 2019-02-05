@@ -13,7 +13,6 @@ namespace Telegram
 
         private ITelegramBotApi _api;
 
-        public bool VerboseLogging { get; set; } = false;
         public int CallTimeout { get; set; } = 900;
         public int CallNumUpdatesLimit { get; set; } = 100;
 
@@ -21,148 +20,160 @@ namespace Telegram
 
         public int NumWorkers { get; private set; }
 
-        public Queue<Update> _queue;
-        public object _queueLock;
+        private Queue<Update> _queue;
+        private object _queueLock;
+        private SemaphoreSlim _queueCount;
 
         public Task[] _taskArray;
+        public object _taskArrayLock;
 
-        public TelegramBotCore(ITelegramBotApi api, int numWorkers)
+        public TelegramBotCore(ITelegramBotApi api, int numWorkers=10)
         {
             _api = api;
-            _queue = new Queue<Telegram.Update>();
+            _queue = new Queue<Update>();
             _queueLock = new object();
+            _queueCount = new SemaphoreSlim(0);
+
             NumWorkers = numWorkers;
-            _taskArray = new Task[NumWorkers + 1];
+            _taskArrayLock = new object();
         }
 
-        public void Start()
+        internal ITelegramBotApi API => _api;
+
+        public void StartAsync()
         {
-            _taskArray[0] = Task.Factory.StartNew(
-                () => {
-                    try
-                    {
-                        RunReceiveLoop().Wait();
-                        logger.Warn("Telegram recv loop terminated");
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.Error(ex, "Telegram recv loop terminated");
-                    }
-                });
+            _taskArray = new Task[NumWorkers + 1];
+
+            _taskArray[0] = UpdateReceiveLoop();
 
             for (int i = 0; i < NumWorkers; ++i)
             {
-                _taskArray[i+1] = Task.Factory.StartNew(
-                    () => {
-                        try
-                        {
-                            Worker();
-                            logger.Warn("Worker terminated");
-                        }
-                        catch (Exception ex)
-                        {
-                            logger.Error(ex, "Worker terminated");
-                        }
-                    });
+                _taskArray[i+1] = Worker();
             }
         }
 
-        public async Task RunReceiveLoop()
+        private async Task UpdateReceiveLoop()
         {
-            var me = await _api.GetMe();
-            if (me != null)
-            {
-                logger.Info("Bot self identification: {0}", me.ToJsonString());
-            }
+            await Task.Yield();
 
-            long? nextOffset = null;
-
-            for (; ; )
+            try
             {
-                try
+                var me = await _api.GetMe();
+                if (me != null)
                 {
-                    var updates = await _api.GetUpdates(
-                        offset: nextOffset, 
-                        timeout: CallTimeout, 
-                        limit: CallNumUpdatesLimit
-                        );
+                    logger.Info("Bot self identification: {0}", me.ToJsonString());
+                }
 
-                    if (updates != null && updates.Count > 0)
+                long? nextOffset = null;
+
+                for (; ; )
+                {
+                    try
                     {
-                        foreach (var update in updates)
+                        var updates = await _api.GetUpdates(
+                            offset: nextOffset,
+                            timeout: CallTimeout,
+                            limit: CallNumUpdatesLimit
+                            );
+
+                        if (updates != null && updates.Count > 0)
                         {
-                            nextOffset = update.UpdateId + 1;
-                            if (update.Message == null)
-                                continue;
+                            logger.Info($"Got {updates.Count} updates from the network");
 
-                            Telegram.User from = update.Message.From;
-                            long userId = update.Message.From.Id;
-                            string text = update.Message.Text ?? "";
-                            
-                            logger.Info($"{from.ToString()}: {userId} {text}");
-                            logger.Debug("full update: {0}", update.ToJsonString());
-
-                            bool added = false;
-                            lock (_queueLock)
+                            foreach (var update in updates)
                             {
-                                if (_queue.Count < QueueMaxSize)
+                                nextOffset = update.UpdateId + 1;
+                                if (update.Message == null)
+                                    continue;
+
+                                User from = update.Message.From;
+                                long userId = update.Message.From.Id;
+                                string text = update.Message.Text ?? "";
+
+                                logger.Info($"{from.ToString()}: {userId} {text}");
+                                logger.Debug("full update: {0}", update.ToJsonString());
+
+                                bool added = false;
+                                lock (_queueLock)
                                 {
-                                    _queue.Enqueue(update);
-                                    Monitor.PulseAll(_queueLock);
-                                    added = true;
+                                    if (_queue.Count < QueueMaxSize)
+                                    {
+                                        _queue.Enqueue(update);
+                                        _queueCount.Release(1);
+                                        added = true;
+                                    }
+                                }
+
+                                if (!added)
+                                {
+                                    logger.Error($"Queue overflow, update dropped");
+                                    var msg = await _api.RespondToUpdate(update, "Bot internal queue overflow");
                                 }
                             }
-                            
-                            if (!added)
-                            {
-                                var msg = await _api.RespondToUpdate(update, "Bot internal queue overflow");
-                            }
                         }
-                    }
-                    else
-                    {
-                        logger.Info("No updates");
-                    }
+                        else
+                        {
+                            logger.Info("No updates");
+                        }
 
-                    await Task.Delay(100);
+                        await Task.Delay(100);
+                    }
+                    catch (TaskCanceledException ex)
+                    {
+                        logger.Error(ex, "Read task cancelled");
+                        await Task.Delay(10 * 1000);
+                    }
                 }
-                catch (TaskCanceledException ex)
-                {
-                    logger.Error(ex, "Read task cancelled");
-                    await Task.Delay(10 * 1000);
-                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Telegram update loop got an exception");
+                throw;
             }
         }
 
-        public void Worker()
+        public async Task Worker()
         {
+            await Task.Yield();
+
+            logger.Info("worker started");
+
             for(;;)
             {
-                Telegram.Update update = null;
+                Update update = null;
+
+                await _queueCount.WaitAsync();
 
                 lock (_queueLock)
                 {
                     if (_queue.Count == 0)
                     {
-                        Monitor.Wait(_queueLock);
+                        logger.Error("internal error: _queue and _queueCount didn't match");
+                        Environment.Exit(-1);
                     }
 
-                    if (_queue.Count != 0)
-                    {
-                        update = _queue.Dequeue();
-                    }
+                    update = _queue.Dequeue();
                 }
 
                 if (update != null)
                 {
-                    HandleUserMessage(_api, update);
+                    logger.Info($"worker got an update from {update?.Message?.From} - processing");
+                    try
+                    {
+                        HandleUserMessage(_api, update);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex, "HandlerUserMessage has thrown an exception - terminating");
+                        throw;
+                    }
                 }
             }
         }
 
         internal abstract void HandleUserMessage(ITelegramBotApi api, Update msg);
 
-        public void WaitAny()
+        public void Wait()
         {
             Task.WaitAny(_taskArray);
         }

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Telegram;
 
@@ -9,8 +10,50 @@ namespace RssMonitorBot.Telegram
 {
     public class RssTelegramBot : TelegramBotCore
     {
-        public RssTelegramBot(ITelegramBotApi api, int numWorkers) : base(api, numWorkers)
+        private static NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
+
+        private IRssReader _rssReader;
+
+        private Task[] _updateWorkers;
+        private UserDetails[] _updateWorkersUsers;
+        private object _updateWorkersLock;
+
+        public RssTelegramBot(ITelegramBotApi api, IRssReader rssReader, int numWorkers=10) : base(api, numWorkers)
         {
+            _rssReader = rssReader;
+            _updateWorkersLock = new object();
+        }
+
+        public void StartRssFetchAsync()
+        {
+            UpdateActiveUsersTasks(null);
+
+            new Thread(() => {
+
+                for (;;)
+                {
+                    Task[] updateWorkers;
+                    lock (_updateWorkersLock)
+                    {
+                        updateWorkers = _updateWorkers;
+                    }
+
+                    if (updateWorkers != null && updateWorkers.Length > 0)
+                    {
+                        int idx = Task.WaitAny(updateWorkers, 5000);
+                        if (idx != -1)
+                        {
+                            logger.Error("It must be a failure - WaitAny returned something");
+                            Environment.Exit(-1);
+                        }
+                    }
+                    else
+                    {
+                        Thread.Sleep(10000);
+                    }
+                }
+
+            }).Start();
         }
 
         internal override void HandleUserMessage(ITelegramBotApi api, Update update)
@@ -32,7 +75,7 @@ namespace RssMonitorBot.Telegram
                 return;
             }
 
-            if (UserState<AuthValidFlag>.ExistsFor(userId) && UserState<AuthValidFlag>.LoadOrDefault(userId).Data.AuthValid)
+            if (UserState<UserDetails>.ExistsFor(userId) && UserState<UserDetails>.LoadOrDefault(userId).Data.AuthValid)
             {
                 await HandleAuthenticatedUserCommand(api, update, from, chat, userId, commandItems);
             }
@@ -104,7 +147,13 @@ namespace RssMonitorBot.Telegram
                 parsedCommand[0] == "/auth" && 
                 parsedCommand[1] == Configuration.BOT_SECRET)
             {
-                UserState<AuthValidFlag>.LoadOrDefault(userId).Save();
+                var state = UserState<UserDetails>.LoadOrDefault(userId);
+                state.Data.ChatId = chat.Id;
+                state.Data.UserId = userId; // kind of overkill
+                state.Save();
+
+                UpdateActiveUsersTasks(state.Data);
+
                 var r = await api.RespondToUpdate(update, $"{from.FirstName}, you are now authenticated");
             }
             else
@@ -112,7 +161,6 @@ namespace RssMonitorBot.Telegram
                 var r = await api.RespondToUpdate(update, $"{from.FirstName}, access denied");
             }
         }
-
 
         private async Task HandleAuthenticatedUserHelpCommand(
             ITelegramBotApi api,
@@ -185,10 +233,26 @@ There is no privacy. Consider anything you send to this bot as public.
                 state.Data.RssEntries = new List<RssUrlEntry>();
             }
 
+            var url = parsedCommand[1];
+            var keyboards = parsedCommand.Skip(2).ToArray();
+
+            if (state.Data.RssEntries.Find(x => x.Url == url) != null)
+            {
+                var re = await api.RespondToUpdate(update, $"{from.FirstName}, the URI {url} is already in your list");
+                return;
+            }
+
+            var rssParsed = await _rssReader.FetchAndParse(url);
+            if (rssParsed == null)
+            {
+                var re = await api.RespondToUpdate(update, $"{from.FirstName}, the URI {url} is not looking like a valid RSS");
+                return;
+            }
+
             state.Data.RssEntries.Add(
                 new RssUrlEntry
                 {
-                    Url = parsedCommand[1], 
+                    Url = parsedCommand[1],
                     Keywords = parsedCommand.Skip(2).ToArray()
                 });
 
@@ -344,6 +408,85 @@ There is no privacy. Consider anything you send to this bot as public.
         {
             var r = await api.RespondToUpdate(update,
                 $"Hello {from.FirstName}, I cannot understand {parsedCommand[0]}, try asking for /help");
+        }
+
+        private void UpdateActiveUsersTasks(UserDetails newUser)
+        {
+            lock (_updateWorkersLock)
+            {
+                if (_updateWorkers == null)
+                {
+                    _updateWorkersUsers = 
+                        UserState<UserDetails>
+                            .LoadAll()
+                            .Where(x => x.Value.Data.AuthValid)
+                            .Select(x => x.Value.Data)
+                            .ToArray();
+
+                    _updateWorkers = _updateWorkersUsers.Select(x => RunFetcher(x)).ToArray();
+                }
+
+                if (newUser != null && newUser.AuthValid)
+                {
+                    var updateWorkersUsers = new UserDetails[_updateWorkersUsers.Length + 1];
+                    var updateWorkers = new Task[_updateWorkers.Length + 1];
+
+                    for (int i = 0; i < _updateWorkers.Length; ++ i)
+                    {
+                        updateWorkers[i] = _updateWorkers[i];
+                        updateWorkersUsers[i] = _updateWorkersUsers[i];
+                    }
+
+                    updateWorkersUsers[updateWorkersUsers.Length - 1] = newUser;
+                    updateWorkers[updateWorkers.Length - 1] = RunFetcher(newUser);
+
+                    _updateWorkersUsers = updateWorkersUsers;
+                    _updateWorkers = updateWorkers;
+                }
+            }
+        }
+
+        private async Task RunFetcher(UserDetails user)
+        {
+            await Task.Yield();
+
+            for (;;)
+            {
+                var rssDetails = UserState<UserRssSubscriptions>.LoadOrDefault(user.UserId);
+                var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(user.UserId);
+
+                if (rssDetails.Data.RssEntries.Count == 0)
+                {
+                    await Task.Delay(60 * 10 * 1000); // always do 10 minutes sleeps 
+                    continue;
+                }
+
+                foreach (var feedDetails in rssDetails.Data.RssEntries)
+                {
+                    var feed = await _rssReader.FetchAndParse(feedDetails.Url);
+                    foreach (var item in feed.Items)
+                    {
+                        bool hasKeywords = feedDetails.Keywords.Length == 0;
+                        foreach (var kw in feedDetails.Keywords)
+                        {
+                            if (item.Title.Contains(kw))
+                            {
+                                hasKeywords = true;
+                                break;
+                            }
+                        }
+
+                        if (hasKeywords)
+                        {
+                            await API.SendMessage(user.ChatId.ToString(), item.Title + "\n" + item.Description);
+                        }
+                    }
+
+                }
+
+
+                await Task.Delay(60 * 10 * 1000); // always do 10 minutes sleeps 
+            }
         }
 
 

@@ -5,9 +5,11 @@ using System.Text;
 namespace RssMonitorBot
 {
     [Serializable]
-    public class AuthValidFlag
+    public class UserDetails
     {
         public bool AuthValid = true;
+        public long UserId;
+        public long ChatId;
     }
 
     [Serializable]
@@ -28,5 +30,11 @@ namespace RssMonitorBot
     {
         public bool Muted;
         public bool Stopped;
+    }
+
+    [Serializable]
+    public class UserFeedPubDates
+    {
+        public Dictionary<string, DateTime> PubDates; // feed URI as a key
     }
 }

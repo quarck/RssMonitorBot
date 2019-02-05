@@ -20,6 +20,26 @@ namespace RssMonitorBot
             _userId = userId;
         }
 
+        public static Dictionary<long, UserState<T>> LoadAll()
+        {
+            var ret = new Dictionary<long, UserState<T>>();
+
+            var dirs = Directory.GetDirectories(Path.Combine(Configuration.SERVER_ROOT, UsersFolder));
+            foreach (var dir in dirs)
+            {
+                if (long.TryParse(Path.GetFileName(dir), out var userId))
+                {
+                    var data = Load(userId);
+                    if (data != null)
+                    {
+                        ret.Add(userId, data);
+                    }
+                }
+            }
+
+            return ret;
+        }
+
         public static bool ExistsFor(long userId)
         {
             return File.Exists(
@@ -43,17 +63,20 @@ namespace RssMonitorBot
 
         public static UserState<T> Load(long userId)
         {
+            var file = Path.Combine(
+                Configuration.SERVER_ROOT,
+                UsersFolder,
+                userId.ToString(),
+                typeof(T).Name
+                );
+
+            if (!File.Exists(file))
+                return null;
+
             T data = null;
             try
             {
                 XmlSerializer serializer = new XmlSerializer(typeof(T));
-
-                var file = Path.Combine(
-                    Configuration.SERVER_ROOT,
-                    UsersFolder,
-                    userId.ToString(),
-                    typeof(T).Name
-                    );
 
                 using (FileStream fs = new FileStream(file, FileMode.Open))
                 {

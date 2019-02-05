@@ -10,7 +10,7 @@ using System.Globalization;
 
 namespace RssMonitorBot
 {
-    public class RssReader
+    public class RssReader : IRssReader
     {
         private HttpClient _httpClient;
 
@@ -52,7 +52,7 @@ namespace RssMonitorBot
             return document != null ? ParseFeed(document) : null;
         }
 
-        public RssFeed ParseFeed(XmlDocument document)
+        private RssFeed ParseFeed(XmlDocument document)
         {
             Console.WriteLine("parse feed enter");
             XmlNode root = document;

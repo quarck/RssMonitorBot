@@ -16,6 +16,8 @@ namespace Telegram
 
         private HttpClient _httpClient = null;
 
+        private string _apiKey;
+
         private static string MethodName_GetUpdates = "getUpdates";
         private static string MethodName_GetMe = "getMe";
         private static string MethodName_SendMessage = "sendMessage";
@@ -39,6 +41,8 @@ namespace Telegram
 
         public TelegramBotApi(string apiKey)
         {
+            _apiKey = apiKey;
+
             BaseUriForGetUpdates = BaseUriForMethod(MethodName_GetUpdates, apiKey);
             BaseUriForGetMe = BaseUriForMethod(MethodName_GetMe, apiKey);
             BaseUriForSendMessage = BaseUriForMethod(MethodName_SendMessage, apiKey);
@@ -54,7 +58,7 @@ namespace Telegram
         private async Task<TResult> DoGetMethodCall<TResult>(string uri)
             where TResult: class 
         {
-            logger.Debug("Executing method call {0}", uri);
+            logger.Debug("Executing method call {0}", uri.Replace(_apiKey, "--api-key--"));
 
             TResult ret = null;
             try
@@ -92,6 +96,8 @@ namespace Telegram
             List<String> allowed_updates = null 
             )
         {
+            logger.Info($"Getting updates: {offset} {limit} {timeout}");
+
             var ub = new UriBuilder(BaseUriForGetUpdates);
             if (offset != null)
             {
@@ -122,6 +128,8 @@ namespace Telegram
             long? reply_to_message_id = null, 
             string reply_markup = null)
         {
+            logger.Info($"Sending message to chat id {chat_id}");
+
             var ub = new UriBuilder(BaseUriForSendMessage);
             ub.AddArgument(nameof(chat_id), chat_id);
             ub.AddArgument(nameof(text), text);
