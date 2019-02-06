@@ -21,7 +21,11 @@ namespace RssMonitorBot
             };
             var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
 
+#if DEBUG
+            config.AddRule(LogLevel.Info, LogLevel.Fatal, logconsole);
+#else 
             config.AddRule(LogLevel.Error, LogLevel.Fatal, logconsole);
+#endif
             config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
 
             NLog.LogManager.Configuration = config;
@@ -33,22 +37,22 @@ namespace RssMonitorBot
 
             SetupLogging(Path.Combine(serverRoot, "log.txt"));
 
-            var botApi = new TelegramBotApi(Configuration.API_KEY);
-            var reader = new RssReader();
-            var bot = new RssTelegramBot(botApi, reader);
-            bot.StartAsync();
-            bot.StartRssFetchAsync();
-            bot.Wait();
+            var bot = 
+                new RssTelegramBot(
+                    new TelegramBotApi(Configuration.API_KEY), 
+                    new RssReader()
+                );
 
-            //var reader = new RssReader();
+            // Eventually the whole bot would run on just two threads, one for rss fetching 
+            // and another one for communication with telegram servers, 
+            // all the other parallelerism is done via Task's cooperative parallelerism
+            var tasks = new Task[2];
+            tasks[0] = Task.Factory.StartNew(() => bot.StartAsync().Wait());
+            tasks[1] = Task.Factory.StartNew(() => bot.StartRssWorkersAsync().Wait());
 
-            //var readTask = reader.FetchAndParse("https://www.rte.ie/news/rss/news-headlines.xml");
-            //readTask.Wait();
-            //var res = readTask.Result;
-
-            //Console.WriteLine($"Done? {res.ToString()}");
-
-            //Console.ReadLine();
+            // If any of the tasks above finishes - something has gone wrong, so we terminate 
+            // on the any of the tasks termination
+            Task.WaitAny(tasks);
         }
     }
 }

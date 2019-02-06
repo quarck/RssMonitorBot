@@ -10,6 +10,7 @@ namespace RssMonitorBot
         where T : class, new()
     {
         private static string UsersFolder = "users";
+        private static string UsersFolderFullPath = Path.Combine(Configuration.SERVER_ROOT, UsersFolder);
 
         private long _userId;
 
@@ -20,24 +21,39 @@ namespace RssMonitorBot
             _userId = userId;
         }
 
-        public static Dictionary<long, UserState<T>> LoadAll()
+        public static IEnumerable<KeyValuePair<long, UserState<T>>> EnumerateAllIndexed(Func<long,bool> idFilter = null)
         {
-            var ret = new Dictionary<long, UserState<T>>();
-
-            var dirs = Directory.GetDirectories(Path.Combine(Configuration.SERVER_ROOT, UsersFolder));
-            foreach (var dir in dirs)
+            foreach (var dir in Directory.EnumerateDirectories(UsersFolderFullPath))
             {
-                if (long.TryParse(Path.GetFileName(dir), out var userId))
+                var name = Path.GetFileName(dir);
+                if (long.TryParse(name, out var userId))
                 {
+                    if (idFilter != null && !idFilter(userId))
+                        continue;
+
+                    var data = Load(userId);
+                    yield return new KeyValuePair<long, UserState<T>>(userId, data);
+                }
+            }
+        }
+
+        public static IEnumerable<UserState<T>> EnumerateAll(Func<long, bool> idFilter = null)
+        {
+            foreach (var dir in Directory.EnumerateDirectories(UsersFolderFullPath))
+            {
+                var name = Path.GetFileName(dir);
+                if (long.TryParse(name, out var userId))
+                {
+                    if (idFilter != null && !idFilter(userId))
+                        continue;
+
                     var data = Load(userId);
                     if (data != null)
                     {
-                        ret.Add(userId, data);
+                        yield return data;
                     }
                 }
             }
-
-            return ret;
         }
 
         public static bool ExistsFor(long userId)

@@ -15,45 +15,34 @@ namespace RssMonitorBot.Telegram
         private IRssReader _rssReader;
 
         private Task[] _updateWorkers;
-        private UserDetails[] _updateWorkersUsers;
-        private object _updateWorkersLock;
+        private readonly int _numRssUpdateWorkers;
+        private readonly TimeSpan _refreshInterval;
 
-        public RssTelegramBot(ITelegramBotApi api, IRssReader rssReader, int numWorkers=10) : base(api, numWorkers)
+        public RssTelegramBot(ITelegramBotApi api, 
+            IRssReader rssReader,
+            int refreshIntervalSeconds = 600,
+            int numWorkers=10, 
+            int numRssUpdateWorkers=10
+            ) 
+            : base(api, numWorkers)
         {
+            _refreshInterval = TimeSpan.FromSeconds(refreshIntervalSeconds);
+            _numRssUpdateWorkers = numRssUpdateWorkers;
             _rssReader = rssReader;
-            _updateWorkersLock = new object();
         }
 
-        public void StartRssFetchAsync()
+        public async Task StartRssWorkersAsync()
         {
-            UpdateActiveUsersTasks(null);
+            _updateWorkers = new Task[_numRssUpdateWorkers];
+            for (int i = 0; i < _updateWorkers.Length; ++ i)
+            {
+                _updateWorkers[i] = UpdateWorkerAsync(i);
+            }
 
-            new Thread(() => {
+            await Task.WhenAny(_updateWorkers);
 
-                for (;;)
-                {
-                    Task[] updateWorkers;
-                    lock (_updateWorkersLock)
-                    {
-                        updateWorkers = _updateWorkers;
-                    }
-
-                    if (updateWorkers != null && updateWorkers.Length > 0)
-                    {
-                        int idx = Task.WaitAny(updateWorkers, 5000);
-                        if (idx != -1)
-                        {
-                            logger.Error("It must be a failure - WaitAny returned something");
-                            Environment.Exit(-1);
-                        }
-                    }
-                    else
-                    {
-                        Thread.Sleep(10000);
-                    }
-                }
-
-            }).Start();
+            logger.Error("One of the workers terminated - shutting down");
+            Environment.Exit(-1);
         }
 
         internal override void HandleUserMessage(ITelegramBotApi api, Update update)
@@ -152,8 +141,6 @@ namespace RssMonitorBot.Telegram
                 state.Data.UserId = userId; // kind of overkill
                 state.Save();
 
-                UpdateActiveUsersTasks(state.Data);
-
                 var r = await api.RespondToUpdate(update, $"{from.FirstName}, you are now authenticated");
             }
             else
@@ -249,14 +236,13 @@ There is no privacy. Consider anything you send to this bot as public.
                 return;
             }
 
-            state.Data.RssEntries.Add(
-                new RssUrlEntry
-                {
-                    Url = parsedCommand[1],
-                    Keywords = parsedCommand.Skip(2).ToArray()
-                });
+            state.Data.RssEntries.Add( new RssUrlEntry { Url = url, Keywords = keyboards } );
 
             state.Save();
+
+            var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(userId);
+            rssPubDates.Data.PubDates[url] = rssParsed.LastBuildDate;
+            rssPubDates.Save();
 
             var r = await api.RespondToUpdate(update, $"{from.FirstName}, it was added");
         }
@@ -410,83 +396,122 @@ There is no privacy. Consider anything you send to this bot as public.
                 $"Hello {from.FirstName}, I cannot understand {parsedCommand[0]}, try asking for /help");
         }
 
-        private void UpdateActiveUsersTasks(UserDetails newUser)
+
+        private async Task UpdateWorkerAsync(int index)
         {
-            lock (_updateWorkersLock)
-            {
-                if (_updateWorkers == null)
-                {
-                    _updateWorkersUsers = 
-                        UserState<UserDetails>
-                            .LoadAll()
-                            .Where(x => x.Value.Data.AuthValid)
-                            .Select(x => x.Value.Data)
-                            .ToArray();
-
-                    _updateWorkers = _updateWorkersUsers.Select(x => RunFetcher(x)).ToArray();
-                }
-
-                if (newUser != null && newUser.AuthValid)
-                {
-                    var updateWorkersUsers = new UserDetails[_updateWorkersUsers.Length + 1];
-                    var updateWorkers = new Task[_updateWorkers.Length + 1];
-
-                    for (int i = 0; i < _updateWorkers.Length; ++ i)
-                    {
-                        updateWorkers[i] = _updateWorkers[i];
-                        updateWorkersUsers[i] = _updateWorkersUsers[i];
-                    }
-
-                    updateWorkersUsers[updateWorkersUsers.Length - 1] = newUser;
-                    updateWorkers[updateWorkers.Length - 1] = RunFetcher(newUser);
-
-                    _updateWorkersUsers = updateWorkersUsers;
-                    _updateWorkers = updateWorkers;
-                }
-            }
-        }
-
-        private async Task RunFetcher(UserDetails user)
-        {
-            await Task.Yield();
+            DateTime lastStart = DateTime.MinValue;
 
             for (;;)
             {
-                var rssDetails = UserState<UserRssSubscriptions>.LoadOrDefault(user.UserId);
-                var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(user.UserId);
+                lastStart = DateTime.Now;
 
-                if (rssDetails.Data.RssEntries.Count == 0)
+                IEnumerable<UserState<UserDetails>> users = 
+                    UserState<UserDetails>.EnumerateAll(x => (x % _numRssUpdateWorkers) == index);
+
+                foreach (var user in users)
                 {
-                    await Task.Delay(60 * 10 * 1000); // always do 10 minutes sleeps 
+                    if (!user.Data.AuthValid)
+                    {
+                        logger.Info($"User {user.Data.UserId} is skipped - auth is not valid");
+                        continue;
+                    }
+
+                    logger.Info($"Fetching feeds for user {user.Data.UserId}");
+                    await RunFetcherAsync(user.Data);
+                }
+
+                var nextStart = lastStart + _refreshInterval;
+                var now = DateTime.Now;
+                if (nextStart < now)
+                {
+                    logger.Error($"Bot seems overloaded: last update cycle took over {_refreshInterval}");
                     continue;
                 }
 
-                foreach (var feedDetails in rssDetails.Data.RssEntries)
-                {
-                    var feed = await _rssReader.FetchAndParse(feedDetails.Url);
-                    foreach (var item in feed.Items)
-                    {
-                        bool hasKeywords = feedDetails.Keywords.Length == 0;
-                        foreach (var kw in feedDetails.Keywords)
-                        {
-                            if (item.Title.Contains(kw))
-                            {
-                                hasKeywords = true;
-                                break;
-                            }
-                        }
+                var toSleepMillis = (int)(nextStart - now).TotalMilliseconds;
+                logger.Info($"Worker {index}: sleeping for {toSleepMillis}ms");
+                await Task.Delay(toSleepMillis);
+            }
+        }
 
-                        if (hasKeywords)
+        private async Task RunFetcherAsync(UserDetails user)
+        {
+            var rssDetails = UserState<UserRssSubscriptions>.LoadOrDefault(user.UserId);
+            var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(user.UserId);
+
+            logger.Info($"User {user.UserId} has {rssDetails.Data.RssEntries.Count} feeds");
+
+            if (rssDetails.Data.RssEntries.Count == 0)
+            {
+                return;
+            }
+
+            var fetchAndParseTasks =
+                rssDetails.Data
+                    .RssEntries
+                    .Select(feed => _rssReader.FetchAndParse(feed.Url))
+                    .ToArray();
+
+            RssFeed[] results = await Task.WhenAll(fetchAndParseTasks);
+
+            for (int feedIdx = 0; feedIdx < results.Length; ++ feedIdx)
+            {
+                var feedInfo = rssDetails.Data.RssEntries[feedIdx];
+                var feedData = results[feedIdx];
+
+                if (feedData == null)
+                {
+                    logger.Info($"User {user.UserId}, feed {feedInfo.Url}: fetch/parse failed");
+                    continue;
+                }
+
+                if (rssPubDates.Data.PubDates.TryGetValue(feedInfo.Url, out var prevPubDate))
+                {
+                    if (prevPubDate == feedData.LastBuildDate)
+                    {
+                        logger.Info($"User {user.UserId}, feed {feedInfo.Url}: Feed didnt update");
+                        continue;
+                    }
+                }
+                else
+                {
+                    prevPubDate = DateTime.MinValue;
+                }
+
+                logger.Info($"User {user.UserId}, feed {feedInfo.Url}: Feed did update, new pub date: {feedData.LastBuildDate}");
+
+                rssPubDates.Data.PubDates[feedInfo.Url] = feedData.LastBuildDate;
+
+                foreach (var item in feedData.Items)
+                {
+                    if (item.PublicationDate <= prevPubDate)
+                    {
+                        continue; // skipping the old item
+                    }
+
+                    logger.Info($"User {user.UserId}, feed {feedInfo.Url}: new feed item: {item.Title}, {item.Link}");
+
+                    bool hasKeywords = feedInfo.Keywords.Length == 0;
+
+                    foreach (var kw in feedInfo.Keywords)
+                    {
+                        if (item.Title.Contains(kw))
                         {
-                            await API.SendMessage(user.ChatId.ToString(), item.Title + "\n" + item.Description);
+                            hasKeywords = true;
+                            break;
                         }
                     }
 
+                    if (hasKeywords)
+                    {
+                        await API.SendMessage(user.ChatId.ToString(), item.Title + "\n" + item.Description);
+                    }
+
+                    break; // one is enought for testing 
                 }
-
-
-                await Task.Delay(60 * 10 * 1000); // always do 10 minutes sleeps 
             }
+
+            rssPubDates.Save();
         }
 
 

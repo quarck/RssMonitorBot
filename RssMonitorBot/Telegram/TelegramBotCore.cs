@@ -40,7 +40,7 @@ namespace Telegram
 
         internal ITelegramBotApi API => _api;
 
-        public void StartAsync()
+        public async Task StartAsync()
         {
             _taskArray = new Task[NumWorkers + 1];
 
@@ -50,6 +50,11 @@ namespace Telegram
             {
                 _taskArray[i+1] = Worker();
             }
+
+            await Task.WhenAny(_taskArray);
+
+            logger.Error("Some of the child tasks has terminated - exiting");
+            Environment.Exit(-1);
         }
 
         private async Task UpdateReceiveLoop()
@@ -172,10 +177,5 @@ namespace Telegram
         }
 
         internal abstract void HandleUserMessage(ITelegramBotApi api, Update msg);
-
-        public void Wait()
-        {
-            Task.WaitAny(_taskArray);
-        }
     }
 }
