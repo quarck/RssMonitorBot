@@ -241,6 +241,10 @@ There is no privacy. Consider anything you send to this bot as public.
             state.Save();
 
             var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(userId);
+            if (rssPubDates.Data.PubDates == null)
+            {
+                rssPubDates.Data.PubDates = new Dictionary<string, DateTime>();
+            }
             rssPubDates.Data.PubDates[url] = rssParsed.LastBuildDate;
             rssPubDates.Save();
 
@@ -399,25 +403,30 @@ There is no privacy. Consider anything you send to this bot as public.
 
         private async Task UpdateWorkerAsync(int index)
         {
-            DateTime lastStart = DateTime.MinValue;
-
             for (;;)
             {
-                lastStart = DateTime.Now;
+                DateTime lastStart = DateTime.Now;
 
                 IEnumerable<UserState<UserDetails>> users = 
                     UserState<UserDetails>.EnumerateAll(x => (x % _numRssUpdateWorkers) == index);
 
                 foreach (var user in users)
                 {
-                    if (!user.Data.AuthValid)
+                    try
                     {
-                        logger.Info($"User {user.Data.UserId} is skipped - auth is not valid");
-                        continue;
-                    }
+                        if (!user.Data.AuthValid)
+                        {
+                            logger.Info($"User {user.Data.UserId} is skipped - auth is not valid");
+                            continue;
+                        }
 
-                    logger.Info($"Fetching feeds for user {user.Data.UserId}");
-                    await RunFetcherAsync(user.Data);
+                        logger.Info($"Fetching feeds for user {user.Data.UserId}");
+                        await RunFetcherAsync(user.Data);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.Error(ex, "failed to run user data");
+                    }
                 }
 
                 var nextStart = lastStart + _refreshInterval;
@@ -439,9 +448,9 @@ There is no privacy. Consider anything you send to this bot as public.
             var rssDetails = UserState<UserRssSubscriptions>.LoadOrDefault(user.UserId);
             var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(user.UserId);
 
-            logger.Info($"User {user.UserId} has {rssDetails.Data.RssEntries.Count} feeds");
+            logger.Info($"User {user.UserId} has {rssDetails.Data.RssEntries?.Count} feeds");
 
-            if (rssDetails.Data.RssEntries.Count == 0)
+            if ((rssDetails.Data.RssEntries?.Count ?? 0) == 0)
             {
                 return;
             }
@@ -495,7 +504,7 @@ There is no privacy. Consider anything you send to this bot as public.
 
                     foreach (var kw in feedInfo.Keywords)
                     {
-                        if (item.Title.Contains(kw))
+                        if (item.Title.Contains(kw, StringComparison.InvariantCultureIgnoreCase))
                         {
                             hasKeywords = true;
                             break;

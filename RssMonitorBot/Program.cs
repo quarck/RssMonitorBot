@@ -37,9 +37,9 @@ namespace RssMonitorBot
 
             SetupLogging(Path.Combine(serverRoot, "log.txt"));
 
-            var bot = 
+            var bot =
                 new RssTelegramBot(
-                    new TelegramBotApi(Configuration.API_KEY), 
+                    new TelegramBotApi(Configuration.API_KEY, TimeSpan.FromSeconds(1000)),
                     new RssReader()
                 );
 

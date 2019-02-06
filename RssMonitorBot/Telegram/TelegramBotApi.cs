@@ -39,7 +39,7 @@ namespace Telegram
 
         public bool VerboseLogging { get; set; } = false;
 
-        public TelegramBotApi(string apiKey)
+        public TelegramBotApi(string apiKey, TimeSpan httpTimeout)
         {
             _apiKey = apiKey;
 
@@ -50,6 +50,7 @@ namespace Telegram
             BaseUriForGetFile = BaseUriForMethod(MethodName_GetFile, apiKey);
 
             _httpClient = new HttpClient();
+            _httpClient.Timeout = httpTimeout;
             _httpClient.BaseAddress = new Uri(BaseTelegramUrl);
             _httpClient.DefaultRequestHeaders.Accept.Clear();
             _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue(Mime_ApplicationJson));

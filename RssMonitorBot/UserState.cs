@@ -39,6 +39,9 @@ namespace RssMonitorBot
 
         public static IEnumerable<UserState<T>> EnumerateAll(Func<long, bool> idFilter = null)
         {
+            if (!Directory.Exists(UsersFolderFullPath))
+                yield break;
+
             foreach (var dir in Directory.EnumerateDirectories(UsersFolderFullPath))
             {
                 var name = Path.GetFileName(dir);
