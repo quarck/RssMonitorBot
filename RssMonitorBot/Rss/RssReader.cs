@@ -85,11 +85,11 @@ namespace RssMonitorBot
                     case "description":
                         ret.Description = child.InnerText;
                         break;
-                    case "pubDate":
+                    case "pubdate":
                         ret.PublicationDate = ParseDate(child.InnerText ?? "");
                         break;
 
-                    case "lastBuildDate":
+                    case "lastbuilddate":
                         ret.LastBuildDate = ParseDate(child.InnerText ?? "");
                         break;
 

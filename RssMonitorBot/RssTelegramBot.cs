@@ -243,10 +243,18 @@ There is no privacy. Consider anything you send to this bot as public.
             var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(userId);
             if (rssPubDates.Data.PubDates == null)
             {
-                rssPubDates.Data.PubDates = new Dictionary<string, DateTime>();
+                rssPubDates.Data.PubDates = new SerializableDictionary<string, DateTime>();
             }
             rssPubDates.Data.PubDates[url] = rssParsed.LastBuildDate;
-            rssPubDates.Save();
+
+            try
+            {
+                rssPubDates.Save();
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Exception while saving xml");
+            }
 
             var r = await api.RespondToUpdate(update, $"{from.FirstName}, it was added");
         }
@@ -463,6 +471,11 @@ There is no privacy. Consider anything you send to this bot as public.
 
             RssFeed[] results = await Task.WhenAll(fetchAndParseTasks);
 
+            if (rssPubDates.Data.PubDates == null)
+            {
+                rssPubDates.Data.PubDates = new SerializableDictionary<string, DateTime>();
+            }
+
             for (int feedIdx = 0; feedIdx < results.Length; ++ feedIdx)
             {
                 var feedInfo = rssDetails.Data.RssEntries[feedIdx];
@@ -509,14 +522,19 @@ There is no privacy. Consider anything you send to this bot as public.
                             hasKeywords = true;
                             break;
                         }
+                        else if (item.Description.Contains(kw, StringComparison.InvariantCultureIgnoreCase))
+                        {
+                            hasKeywords = true;
+                            break;
+                        }
+
                     }
 
                     if (hasKeywords)
                     {
-                        await API.SendMessage(user.ChatId.ToString(), item.Title + "\n" + item.Description);
+                        await API.SendMessage(user.ChatId.ToString(),
+                            "**" + item.Title + "**\n\n" + item.Description + "\n"  + item.Link);
                     }
-
-                    break; // one is enought for testing 
                 }
             }
 
