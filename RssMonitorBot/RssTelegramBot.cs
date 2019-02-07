@@ -646,6 +646,8 @@ There is no privacy. Consider anything you send to this bot as public.
 
                     if (hasKeywords)
                     {
+                        rssPubDates.Data.AddRecentLink(item.Link);
+
                         await API.SendMessage(
                             user.ChatId.ToString(),
                             item.Link, 
