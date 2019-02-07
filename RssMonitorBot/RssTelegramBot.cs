@@ -143,10 +143,15 @@ namespace RssMonitorBot.Telegram
 
                 var r = await api.RespondToUpdate(update, $"{from.FirstName}, you are now authenticated");
             }
+            else if (parsedCommand.Length > 1 && parsedCommand[0] == "/start")
+            {
+                await HandleUnauthenticatedUserStartCommand(api, update, from, chat, userId, parsedCommand);
+            }
             else
             {
                 var r = await api.RespondToUpdate(update, $"{from.FirstName}, access denied");
             }
+            
         }
 
         private async Task HandleAuthenticatedUserHelpCommand(
@@ -170,8 +175,14 @@ namespace RssMonitorBot.Telegram
 /del <number> 
     - delete subscription by the number 
 
-/word <number> [optional] [keywords] 
+/words <number> [optional] [keywords] 
     - update the list of keywords for subscription index, keywords can be empty
+
+/words add <number> <word> 
+    - add a new keyword to subscription index
+
+/words del <number> <word> 
+    - del a keyword from subscription index
 
 /mute 
     - mute everything, you would keep receiving updates but without any notifications
@@ -316,6 +327,23 @@ There is no privacy. Consider anything you send to this bot as public.
             var r = await api.RespondToUpdate(update, $"{from.FirstName}, {idx} was removed");
         }
 
+        private async Task HandleUnauthenticatedUserStartCommand(
+            ITelegramBotApi api,
+            Update update,
+            User from,
+            Chat chat,
+            long userId,
+            string[] parsedCommand
+            )
+        {
+            var state = UserState<UserMuteState>.LoadOrDefault(userId);
+            state.Data.Stopped = true;
+            state.Save();
+
+            var r = await api.RespondToUpdate(update, $"Saluton {from.FirstName}. Estas propra boto, vi bezonas rajto pro uzi gxin");
+        }
+
+
         private async Task HandleAuthenticatedUserStopCommand(
             ITelegramBotApi api,
             Update update,
@@ -343,7 +371,7 @@ There is no privacy. Consider anything you send to this bot as public.
         {
             UnStop(userId);
 
-            if (parsedCommand.Length < 2 || !int.TryParse(parsedCommand[1], out var idx))
+            if (parsedCommand.Length < 2)
             {
                 var rr = await api.RespondToUpdate(update, $"{from.FirstName}, please give arguments to the command");
                 return;
@@ -351,16 +379,86 @@ There is no privacy. Consider anything you send to this bot as public.
 
             var state = UserState<UserRssSubscriptions>.LoadOrDefault(userId);
 
-            if (state.Data.RssEntries == null || idx >= state.Data.RssEntries.Count || idx < 0)
+            if (int.TryParse(parsedCommand[1], out var idx))
             {
-                var rr = await api.RespondToUpdate(update, $"{from.FirstName}, index {idx} is not known");
+                if (state.Data.RssEntries == null || idx >= state.Data.RssEntries.Count || idx < 0)
+                {
+                    var rr = await api.RespondToUpdate(update, $"{from.FirstName}, index {idx} is not known");
+                    return;
+                }
+
+                var keyWords = parsedCommand.Skip(2).ToHashSet();
+                state.Data.RssEntries[idx].Keywords = keyWords.ToArray();
+                state.Save();
+
+                var r = await api.RespondToUpdate(update, $"{from.FirstName}, {idx} was updated");
+            }
+            else if (parsedCommand[1] == "add" && parsedCommand.Length >= 4 && 
+                int.TryParse(parsedCommand[2], out var addIdx))
+            {                
+                var addWords = parsedCommand.Skip(3);
+
+                if (state.Data.RssEntries == null || addIdx >= state.Data.RssEntries.Count || addIdx < 0)
+                {
+                    var rr = await api.RespondToUpdate(update, $"{from.FirstName}, index {addIdx} is not known");
+                    return;
+                }
+
+                if (state.Data.RssEntries[idx].Keywords == null)
+                {
+                    state.Data.RssEntries[idx].Keywords = addWords.ToArray();
+                }
+                else
+                {
+                    var words = state.Data.RssEntries[idx].Keywords.ToHashSet();
+                    foreach (var newWord in addWords)
+                    {
+                        words.Add(newWord);
+                    }
+                    state.Data.RssEntries[idx].Keywords = words.ToArray();
+                }
+
+                state.Save();
+
+                var r = await api.RespondToUpdate(update, $"{from.FirstName}, {idx} was updated");
+            }
+            else if (parsedCommand[1] == "del" && parsedCommand.Length >= 4 &&
+                int.TryParse(parsedCommand[2], out var delIdx))
+            {
+                var delWords = parsedCommand.Skip(3);
+
+                if (state.Data.RssEntries == null || delIdx >= state.Data.RssEntries.Count || delIdx < 0)
+                {
+                    var rr = await api.RespondToUpdate(update, $"{from.FirstName}, index {delIdx} is not known");
+                    return;
+                }
+
+                if (state.Data.RssEntries[idx].Keywords != null)
+                {
+                    var words = state.Data.RssEntries[idx].Keywords.ToHashSet();
+                    foreach (var delWord in delWords)
+                    {
+                        words.Remove(delWord);
+                    }
+                    state.Data.RssEntries[idx].Keywords = words.ToArray();
+                }
+
+                state.Save();
+
+                var note = (state.Data.RssEntries[idx].Keywords == null ||
+                    state.Data.RssEntries[idx].Keywords.Length == 0) 
+                        ? ", WARNING: keyword list is not empty"
+                        : "";
+
+                var r = await api.RespondToUpdate(update, $"{from.FirstName}, {idx} was updated{note}");
+            }
+            else
+            {
+
+                var rr = await api.RespondToUpdate(update, $"{from.FirstName}, please give arguments to the command");
                 return;
             }
 
-            state.Data.RssEntries[idx].Keywords = parsedCommand.Skip(2).ToArray();
-            state.Save();
-
-            var r = await api.RespondToUpdate(update, $"{from.FirstName}, {idx} was updated");
         }
 
         private async Task HandleAuthenticatedUserMuteCommand(
@@ -456,6 +554,16 @@ There is no privacy. Consider anything you send to this bot as public.
             var rssDetails = UserState<UserRssSubscriptions>.LoadOrDefault(user.UserId);
             var rssPubDates = UserState<UserFeedPubDates>.LoadOrDefault(user.UserId);
 
+            var muteSettings = UserState<UserMuteState>.LoadOrDefault(user.UserId);
+
+            if (muteSettings.Data.Stopped)
+            {
+                logger.Info($"Bot is stopped for {user.UserId} -- skipping");
+                return;
+            }
+
+            bool isMuted = muteSettings.Data.Muted;
+
             logger.Info($"User {user.UserId} has {rssDetails.Data.RssEntries?.Count} feeds");
 
             if ((rssDetails.Data.RssEntries?.Count ?? 0) == 0)
@@ -513,6 +621,12 @@ There is no privacy. Consider anything you send to this bot as public.
 
                     logger.Info($"User {user.UserId}, feed {feedInfo.Url}: new feed item: {item.Title}, {item.Link}");
 
+                    if (rssPubDates.Data.IsRecent(item.Link))
+                    {
+                        logger.Info($"User {user.UserId}, feed {feedInfo.Url}: user has seen this recently, skipping: {item.Link}");
+                        continue;
+                    }
+
                     bool hasKeywords = feedInfo.Keywords.Length == 0;
 
                     foreach (var kw in feedInfo.Keywords)
@@ -532,8 +646,10 @@ There is no privacy. Consider anything you send to this bot as public.
 
                     if (hasKeywords)
                     {
-                        await API.SendMessage(user.ChatId.ToString(),
-                            "**" + item.Title + "**\n\n" + item.Description + "\n"  + item.Link);
+                        await API.SendMessage(
+                            user.ChatId.ToString(),
+                            item.Link, 
+                            disable_notification: isMuted ? (bool?)true : null);
                     }
                 }
             }
