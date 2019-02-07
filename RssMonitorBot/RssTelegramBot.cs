@@ -117,6 +117,10 @@ namespace RssMonitorBot.Telegram
                     await HandleAuthenticatedUserUnmuteCommand(api, update, from, chat, userId, parsedCommand);
                     break;
 
+                case "/hours":
+                    await HandleAuthenticatedUserHoursCommand(api, update, from, chat, userId, parsedCommand);
+                    break;
+
                 default:
                     await HandleAuthenticatedUserUnknownCommand(api, update, from, chat, userId, parsedCommand);
                     break;
@@ -189,6 +193,10 @@ namespace RssMonitorBot.Telegram
 
 /unmute 
     - unmute everything
+
+/hours <from> <to>
+    - set allowed notification hours, in 24 format, inclusive both, e.g. /hours 7 20 would 
+    mean notifications are allowed from 7:00:00 to 20:00:00
 
 /stop 
     - stop the bot completely, do any edit to un-stop it
@@ -493,6 +501,31 @@ There is no privacy. Consider anything you send to this bot as public.
             var r = await api.RespondToUpdate(update, $"{from.FirstName}, bot un-muted");
         }
 
+        private async Task HandleAuthenticatedUserHoursCommand(
+            ITelegramBotApi api,
+            Update update,
+            User from,
+            Chat chat,
+            long userId,
+            string[] parsedCommand
+            )
+        {
+            var state = UserState<UserMuteState>.LoadOrDefault(userId);
+
+            if (parsedCommand.Length != 3 ||
+                !int.TryParse(parsedCommand[1], out var hoursFrom) ||
+                !int.TryParse(parsedCommand[2], out var hoursTo))
+            {
+                var r1 = await api.RespondToUpdate(update, $"{from.FirstName}, I need arguments");
+                return;
+            }
+
+            state.Data.SetHours(hoursFrom, hoursTo);
+            state.Save();
+
+            var r = await api.RespondToUpdate(update, $"{from.FirstName}, bot will mute notifications when outside [{hoursFrom}:00:00, {hoursTo}:00:00]");
+        }
+
         private async Task HandleAuthenticatedUserUnknownCommand(
             ITelegramBotApi api,
             Update update,
@@ -562,7 +595,8 @@ There is no privacy. Consider anything you send to this bot as public.
                 return;
             }
 
-            bool isMuted = muteSettings.Data.Muted;
+            var now = DateTime.Now;
+            bool isMuted = muteSettings.Data.IsMutedNow(ref now);
 
             logger.Info($"User {user.UserId} has {rssDetails.Data.RssEntries?.Count} feeds");
 

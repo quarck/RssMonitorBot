@@ -34,6 +34,24 @@ namespace RssMonitorBot
     {
         public bool Muted;
         public bool Stopped;
+
+        public int DaySecondsFrom = 0;
+        public int DaySecondsTo = 0;
+
+        public void SetHours(int from, int to)
+        {
+            DaySecondsFrom = from * 3600;
+            DaySecondsTo = to * 3600;
+        }
+
+        public bool IsMutedNow(ref DateTime dateTime)
+        {
+            if (Muted)
+                return true;
+            var daySeconds = dateTime.Hour * 3600 + dateTime.Minute * 60 + dateTime.Second;
+            return (DaySecondsFrom == 0 && DaySecondsTo == 0) ||
+                (daySeconds >= DaySecondsFrom && daySeconds <= DaySecondsTo);
+        }
     }
 
 
