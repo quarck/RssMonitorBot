@@ -59,7 +59,7 @@ namespace Telegram
         private async Task<TResult> DoGetMethodCall<TResult>(string uri)
             where TResult: class 
         {
-            logger.Debug("Executing method call {0}", uri.Replace(_apiKey, "--api-key--"));
+            logger.Debug("Executing method call {0}", uri);
 
             TResult ret = null;
             try
