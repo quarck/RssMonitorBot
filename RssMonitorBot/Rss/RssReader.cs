@@ -12,6 +12,7 @@ namespace RssMonitorBot
 {
     public class RssReader : IRssReader
     {
+        private NLog.Logger logger = NLog.LogManager.GetCurrentClassLogger();
         private HttpClient _httpClient;
 
         public RssReader()
@@ -22,6 +23,12 @@ namespace RssMonitorBot
 
         public async Task<RssFeed> FetchAndParse(string uri)
         {
+            var uriLc = uri.ToLower();
+            if (!uriLc.StartsWith("http://") && !uriLc.StartsWith("https://"))
+            {
+                uri = "https://" + uri;
+            }
+
             XmlDocument document = null; 
             try
             {
@@ -29,23 +36,29 @@ namespace RssMonitorBot
 
                 if (!string.IsNullOrEmpty(resp))
                 {
-                    Console.WriteLine($"Got Xml: {resp}");
+                    logger.Info($"Received XML document of {resp.Length} bytes length for uri {uri}");
                     document = new XmlDocument();
                     document.LoadXml(resp);
-                    Console.WriteLine("parse ok");
+                    logger.Info($"Received XML document of {resp.Length} bytes length for uri {uri}, and parsed OK");
                 }
                 else
                 {
-                    Console.WriteLine("Fetch failed");
+                    logger.Error($"Fetch failed for {uri}: received an empty document");
                 }
             }
-            catch (HttpRequestException e)
+            catch (HttpRequestException ex)
             {
-                Console.WriteLine(e.ToString());
+                logger.Error(ex, $"Fetch failed for {uri}");
+                document = null;
             }
-            catch (XmlException e)
+            catch (XmlException ex)
             {
-                Console.WriteLine(e.ToString());
+                logger.Error(ex, $"Fetch failed for {uri}");
+                document = null;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, $"Fetch failed for {uri}");
                 document = null;
             }
 
@@ -54,7 +67,6 @@ namespace RssMonitorBot
 
         private RssFeed ParseFeed(XmlDocument document)
         {
-            Console.WriteLine("parse feed enter");
             XmlNode root = document;
 
             if (!root.HasChildNodes)

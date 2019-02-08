@@ -17,14 +17,17 @@ namespace RssMonitorBot
 
             var logfile = new NLog.Targets.FileTarget("logfile") {
                 FileName = path,
-                FileNameKind = NLog.Targets.FilePathKind.Absolute
+                FileNameKind = NLog.Targets.FilePathKind.Absolute, 
+                Layout = "${longdate} ${level:uppercase=true} ${logger}: ${message} ${exception:format=tostring}"
             };
-            var logconsole = new NLog.Targets.ConsoleTarget("logconsole");
+
+            var logconsole = new NLog.Targets.ConsoleTarget("logconsole")
+            {
+                Layout = "${longdate} ${level:uppercase=true} ${logger}: ${message} ${exception:format=tostring}"
+            };
 
 #if DEBUG
             config.AddRule(LogLevel.Info, LogLevel.Fatal, logconsole);
-#else 
-            config.AddRule(LogLevel.Error, LogLevel.Fatal, logconsole);
 #endif
             config.AddRule(LogLevel.Debug, LogLevel.Fatal, logfile);
 

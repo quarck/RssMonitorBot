@@ -45,6 +45,11 @@ namespace RssMonitorBot.Telegram
             Environment.Exit(-1);
         }
 
+        internal static string ParseKeyword(string kw)
+        {
+            return kw.Replace('_', ' ');
+        }
+
         internal override void HandleUserMessage(ITelegramBotApi api, Update update)
         {
             HandleUserMessageAsync(api, update).Wait();
@@ -240,7 +245,7 @@ There is no privacy. Consider anything you send to this bot as public.
             }
 
             var url = parsedCommand[1];
-            var keyboards = parsedCommand.Skip(2).ToArray();
+            var keyboards = parsedCommand.Skip(2).Select(x => ParseKeyword(x)).ToArray();
 
             if (state.Data.RssEntries.Find(x => x.Url == url) != null)
             {
@@ -297,7 +302,7 @@ There is no privacy. Consider anything you send to this bot as public.
                 for (int i = 0; i < state.Data.RssEntries.Count; ++i)
                 {
                     var entry = state.Data.RssEntries[i];
-                    var kws = string.Join(" ", entry.Keywords);
+                    var kws = string.Join(", ", entry.Keywords);
                     var rr = await api.RespondToUpdate(update, $"{i}: {entry.Url} {kws}");
                 }
             }
@@ -395,7 +400,7 @@ There is no privacy. Consider anything you send to this bot as public.
                     return;
                 }
 
-                var keyWords = parsedCommand.Skip(2).ToHashSet();
+                var keyWords = parsedCommand.Skip(2).Select(x => ParseKeyword(x)).ToHashSet();
                 state.Data.RssEntries[idx].Keywords = keyWords.ToArray();
                 state.Save();
 
@@ -404,7 +409,7 @@ There is no privacy. Consider anything you send to this bot as public.
             else if (parsedCommand[1] == "add" && parsedCommand.Length >= 4 && 
                 int.TryParse(parsedCommand[2], out var addIdx))
             {                
-                var addWords = parsedCommand.Skip(3);
+                var addWords = parsedCommand.Select(x => ParseKeyword(x)).Skip(3);
 
                 if (state.Data.RssEntries == null || addIdx >= state.Data.RssEntries.Count || addIdx < 0)
                 {
@@ -433,7 +438,7 @@ There is no privacy. Consider anything you send to this bot as public.
             else if (parsedCommand[1] == "del" && parsedCommand.Length >= 4 &&
                 int.TryParse(parsedCommand[2], out var delIdx))
             {
-                var delWords = parsedCommand.Skip(3);
+                var delWords = parsedCommand.Select(x => ParseKeyword(x)).Skip(3);
 
                 if (state.Data.RssEntries == null || delIdx >= state.Data.RssEntries.Count || delIdx < 0)
                 {
@@ -462,11 +467,9 @@ There is no privacy. Consider anything you send to this bot as public.
             }
             else
             {
-
                 var rr = await api.RespondToUpdate(update, $"{from.FirstName}, please give arguments to the command");
                 return;
             }
-
         }
 
         private async Task HandleAuthenticatedUserMuteCommand(
@@ -681,11 +684,7 @@ There is no privacy. Consider anything you send to this bot as public.
                     if (hasKeywords)
                     {
                         rssPubDates.Data.AddRecentLink(item.Link);
-
-                        await API.SendMessage(
-                            user.ChatId.ToString(),
-                            item.Link, 
-                            disable_notification: isMuted ? (bool?)true : null);
+                        await SendRssItem(user, item, isMuted);
                     }
                 }
             }
@@ -693,6 +692,25 @@ There is no privacy. Consider anything you send to this bot as public.
             rssPubDates.Save();
         }
 
+        private async Task SendRssItem(UserDetails user, RssFeedItem item, bool isMuted)
+        {
+            var link = item.Link;
+            if (link.Length > 30)
+            {
+                link = link.Substring(0, 27) + "...";
+            }
 
+            var message = $"<b>{item.Title}</b><br/>\r\n" +
+                $"{item.Description}<br/>\r\n" +
+                $"<a href=\"{item.Link}\">{link}</a>\r\n";
+
+            await API.SendMessage(
+                user.ChatId.ToString(),
+                message,
+                disable_notification: isMuted ? (bool?)true : null, 
+                disable_web_page_preview: true, 
+                parse_mode: "HTML" 
+                );
+        }
     }
 }

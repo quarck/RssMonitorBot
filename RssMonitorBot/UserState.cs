@@ -103,8 +103,7 @@ namespace RssMonitorBot
                 }
             }
             catch (Exception ex)
-            {
-                Console.WriteLine(ex.ToString()); // parse failed 
+            {                
                 data = null;
             }
 

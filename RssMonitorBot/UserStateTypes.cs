@@ -49,8 +49,8 @@ namespace RssMonitorBot
             if (Muted)
                 return true;
             var daySeconds = dateTime.Hour * 3600 + dateTime.Minute * 60 + dateTime.Second;
-            return (DaySecondsFrom == 0 && DaySecondsTo == 0) ||
-                (daySeconds >= DaySecondsFrom && daySeconds <= DaySecondsTo);
+            return (DaySecondsFrom != 0 || DaySecondsTo != 0) &&
+                (daySeconds < DaySecondsFrom || daySeconds > DaySecondsTo);
         }
     }
 
@@ -60,7 +60,7 @@ namespace RssMonitorBot
     public class UserFeedPubDates
     {
         [NonSerialized]
-        private static int MAX_RECENTS = 40;
+        private static int MAX_RECENTS = 500;
 
         public SerializableDictionary<string, DateTime> PubDates; // feed URI as a key
         public List<string> RecentLinks;
