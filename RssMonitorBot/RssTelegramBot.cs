@@ -694,7 +694,7 @@ There is no privacy. Consider anything you send to this bot as public.
 
         private async Task SendRssItem(UserDetails user, RssFeedItem item, bool isMuted)
         {
-            var message = $"*{item.Title}*\n{item.Link}";
+            var message = $"[{item.Title}]({item.Link})";
 
             await API.SendMessage(
                 user.ChatId.ToString(),
