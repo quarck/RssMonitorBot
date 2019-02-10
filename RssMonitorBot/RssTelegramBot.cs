@@ -634,7 +634,7 @@ There is no privacy. Consider anything you send to this bot as public.
 
                 if (rssPubDates.Data.PubDates.TryGetValue(feedInfo.Url, out var prevPubDate))
                 {
-                    if (prevPubDate == feedData.LastBuildDate)
+                    if (prevPubDate == feedData.LastBuildDate && prevPubDate != DateTime.MinValue)
                     {
                         logger.Info($"User {user.UserId}, feed {feedInfo.Url}: Feed didnt update");
                         continue;
@@ -651,7 +651,7 @@ There is no privacy. Consider anything you send to this bot as public.
 
                 foreach (var item in feedData.Items)
                 {
-                    if (item.PublicationDate <= prevPubDate)
+                    if (item.PublicationDate <= prevPubDate && prevPubDate != DateTime.MinValue)
                     {
                         continue; // skipping the old item
                     }
@@ -678,7 +678,6 @@ There is no privacy. Consider anything you send to this bot as public.
                             hasKeywords = true;
                             break;
                         }
-
                     }
 
                     if (hasKeywords)

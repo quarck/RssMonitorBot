@@ -146,21 +146,21 @@ namespace RssMonitorBot
             var split = dateString.Split(' ');
             if (split.Length == 6)
             {
-                var dd = split[1];
-                var MMM = split[2];
-                var yyyy = split[3];
-                var HHmmss = split[4];
-                if (dd.Length == 1)
-                    dd = "0" + dd;
+                var day = split[1];
+                var month = split[2];
+                var year = split[3];
+                var time = split[4];
+                if (day.Length == 1)
+                    day = "0" + day;
 
-                var zzzz = split[5];
-                var zzzzLen = zzzz.Length;
-                if (zzzzLen > 4)
+                var tz = split[5];
+                var tzLen = tz.Length;
+                if (tzLen > 4)
                 {
-                    zzzz = zzzz.Substring(0, zzzzLen - 2) + ":" + zzzz.Substring(zzzzLen - 2);
+                    tz = tz.Substring(0, tzLen - 2) + ":" + tz.Substring(tzLen - 2);
                 }
 
-                if (DateTime.TryParseExact($"{dd} {MMM} {yyyy} {HHmmss} {zzzz}",
+                if (DateTime.TryParseExact($"{day} {month} {year} {time} {tz}",
                     "dd MMM yyyy HH:mm:ss zzzz",
                     CultureInfo.InvariantCulture,
                     DateTimeStyles.None,
@@ -172,7 +172,5 @@ namespace RssMonitorBot
 
             return DateTime.MinValue;
         }
-
-
     }
 }
