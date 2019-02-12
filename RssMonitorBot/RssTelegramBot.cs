@@ -693,15 +693,36 @@ There is no privacy. Consider anything you send to this bot as public.
 
         private async Task SendRssItem(UserDetails user, RssFeedItem item, bool isMuted)
         {
-            var message = $"[{item.Title}]({item.Link})";
+            const string ReutersLink = "http://feeds.reuters.com/";
 
-            await API.SendMessage(
-                user.ChatId.ToString(),
-                message,
-                disable_notification: isMuted ? (bool?)true : null, 
-                disable_web_page_preview: false, 
-                parse_mode: "Markdown" 
-                );
+            if (!item.Link.ToLower().Contains(ReutersLink))
+            {
+                var message = $"[{item.Title}]({item.Link})";
+
+                await API.SendMessage(
+                    user.ChatId.ToString(),
+                    message,
+                    disable_notification: isMuted ? (bool?)true : null,
+                    disable_web_page_preview: false,
+                    parse_mode: "Markdown"
+                    );
+            }
+            else
+            {
+                var text = item.Description.Length > 200 
+                    ? item.Description.Substring(0, 200) 
+                    : item.Description;
+                // handicapt mode for ruters 
+                var message = $"*{item.Title}*\n\n_{text}_\n\n[Read More]({item.Link})";
+
+                await API.SendMessage(
+                    user.ChatId.ToString(),
+                    message,
+                    disable_notification: isMuted ? (bool?)true : null,
+                    disable_web_page_preview: true,
+                    parse_mode: "Markdown"
+                    );
+            }
         }
     }
 }
