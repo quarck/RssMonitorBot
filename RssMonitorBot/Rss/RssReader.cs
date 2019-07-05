@@ -65,6 +65,28 @@ namespace RssMonitorBot
             return document != null ? ParseFeed(document) : null;
         }
 
+        public RssFeed ParseFeedXml(string documentContent)
+        {
+            XmlDocument document = null;
+            try
+            {
+                document = new XmlDocument();
+                document.LoadXml(documentContent);
+            }
+            catch (XmlException ex)
+            {
+                logger.Error(ex, $"Rss Parsing failed");
+                document = null;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, $"Rss Parsing failed");
+                document = null;
+            }
+
+            return document != null ? ParseFeed(document) : null;
+        }
+
         private RssFeed ParseFeed(XmlDocument document)
         {
             XmlNode root = document;

@@ -20,8 +20,22 @@ namespace RssMonitorBot
             return args[n];
         }
 
+        private static T GetArgNT<T>(int n, string name, Func<string, T> parse)
+        {
+            try
+            {
+                return parse(GetArgN(n, name));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error with arg {n} ({name}): {ex}");
+                throw;
+            }
+        }
+
         public static string SERVER_ROOT = GetArgN(1, "server root");
         public static string API_KEY = GetArgN(2, "api key");
         public static string BOT_SECRET = GetArgN(3, "bot secret");
+        public static int REFRESH_INTERVAL_SECONDS = GetArgNT<int>(4, "refresh interval", x => int.Parse(x));
     }
 }

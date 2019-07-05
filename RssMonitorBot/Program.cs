@@ -43,7 +43,8 @@ namespace RssMonitorBot
             var bot =
                 new RssTelegramBot(
                     new TelegramBotApi(Configuration.API_KEY, TimeSpan.FromSeconds(1000)),
-                    new RssReader()
+                    new RssReader(), 
+                    refreshIntervalSeconds: Configuration.REFRESH_INTERVAL_SECONDS
                 );
 
             // Eventually the whole bot would run on just two threads, one for rss fetching 
