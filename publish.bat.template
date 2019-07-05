@@ -1,0 +1,2 @@
+dotnet publish -c Release 
+scp -r RssMonitorBot\bin\Release\netcoreapp2.2\publish root@YOUR_HOST_NAME:/tmp/publish 
