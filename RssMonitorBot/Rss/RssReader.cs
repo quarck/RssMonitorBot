@@ -18,7 +18,7 @@ namespace RssMonitorBot
         public RssReader()
         {
             _httpClient = new HttpClient();
-            _httpClient.MaxResponseContentBufferSize = 1024 * 256;
+            _httpClient.MaxResponseContentBufferSize = 1024 * 1024 * 8;
         }
 
         public async Task<RssFeed> FetchAndParse(string uri)
@@ -87,17 +87,8 @@ namespace RssMonitorBot
             return document != null ? ParseFeed(document) : null;
         }
 
-        private RssFeed ParseFeed(XmlDocument document)
+        private RssFeed ParseRssFeed(XmlDocument document, XmlNode rss)
         {
-            XmlNode root = document;
-
-            if (!root.HasChildNodes)
-                return null;
-
-            XmlNode rss = root["rss"];
-            if (rss == null || !rss.HasChildNodes)
-                return null;
-
             XmlNode channel = rss["channel"];
             if (channel == null || !channel.HasChildNodes)
                 return null;
@@ -120,16 +111,16 @@ namespace RssMonitorBot
                         ret.Description = child.InnerText;
                         break;
                     case "pubdate":
-                        ret.PublicationDate = ParseDate(child.InnerText ?? "");
+                        ret.PublicationDate = ParseRssDate(child.InnerText ?? "");
                         break;
 
                     case "lastbuilddate":
-                        ret.LastBuildDate = ParseDate(child.InnerText ?? "");
+                        ret.LastBuildDate = ParseRssDate(child.InnerText ?? "");
                         break;
 
                     case "item":
                         {
-                            var parsed = ParseItem(child);
+                            var parsed = ParseRssItem(child);
                             if (parsed != null)
                                 ret.Items.Add(parsed);
                             break;
@@ -140,7 +131,64 @@ namespace RssMonitorBot
             return ret;
         }
 
-        private RssFeedItem ParseItem(XmlNode node)
+        private RssFeed ParseAtomFeed(XmlDocument document, XmlNode feed)
+        {
+            var ret = new RssFeed();
+            ret.Items = new List<RssFeedItem>();
+
+            for (int i = 0; i < feed.ChildNodes.Count; i++)
+            {
+                var child = feed.ChildNodes[i];
+                switch (child.Name.ToLower())
+                {
+                    case "title":
+                        ret.Title = child.InnerText;
+                        break;
+                    case "link":
+                        ret.Link = child.InnerText;
+                        break;
+                    case "subtitle":
+                        ret.Description = child.InnerText;
+                        break;
+                    case "updated":
+                        ret.LastBuildDate = ret.PublicationDate = ParseISO8601String(child.InnerText ?? "");
+                        break;
+
+                    case "entry":
+                        {
+                            var parsed = ParseAtomEntry(child);
+                            if (parsed != null)
+                                ret.Items.Add(parsed);
+                            break;
+                        }
+                }
+            }
+
+            return ret;
+        }
+
+        private RssFeed ParseFeed(XmlDocument document)
+        {
+            XmlNode root = document;
+
+            if (!root.HasChildNodes)
+                return null;
+
+            // Try parsing as RSS
+            XmlNode rss = root["rss"];
+            if (rss != null && rss.HasChildNodes)
+                return ParseRssFeed(document, rss);
+
+            // Try parsing as Atom
+            XmlNode feed = root["feed"];
+            if (feed != null && feed.HasChildNodes)
+                return ParseAtomFeed(document, feed);
+
+            // None matched
+            return null;
+        }
+
+        private RssFeedItem ParseRssItem(XmlNode node)
         {
             if (!node.HasChildNodes)
                 return null;
@@ -156,14 +204,37 @@ namespace RssMonitorBot
             ret.Title = title?.InnerText ?? "";
             ret.Description = description?.InnerText ?? "";
             ret.Link = node["link"]?.InnerText ?? "";
-            ret.PublicationDate = ParseDate(node["pubDate"]?.InnerText ?? "");
+            ret.PublicationDate = ParseRssDate(node["pubDate"]?.InnerText ?? "");
             ret.Guid = node["guid"]?.InnerText ?? "";
             ret.EnclosureUrl = node["enclosure"]?.Attributes["url"]?.Value ?? "";
 
             return ret;        
         }
 
-        private DateTime ParseDate(string dateString)
+        private RssFeedItem ParseAtomEntry(XmlNode node)
+        {
+            if (!node.HasChildNodes)
+                return null;
+
+            RssFeedItem ret = new RssFeedItem();
+
+            var title = node["title"];
+            var content = node["content"];
+
+            if (title == null && content == null)
+                return null;
+
+            ret.Title = title?.InnerText ?? "";
+            ret.Description = content?.InnerText ?? "";
+            ret.Link = node["link"]?.GetAttribute("href") ?? "";
+            ret.PublicationDate = ParseISO8601String(node["published"]?.InnerText ?? "");
+            ret.Guid = node["id"]?.InnerText ?? "";
+            ret.EnclosureUrl = ret.Link;
+
+            return ret;
+        }
+
+        private DateTime ParseRssDate(string dateString)
         {
             var split = dateString.Split(' ');
             if (split.Length == 6)
@@ -193,6 +264,38 @@ namespace RssMonitorBot
             }
 
             return DateTime.MinValue;
+        }
+
+
+        static readonly string[] iso8601DateFormats = { 
+            // Basic formats
+            "yyyyMMddTHHmmsszzz",
+            "yyyyMMddTHHmmsszz",
+            "yyyyMMddTHHmmssZ",
+            // Extended formats
+            "yyyy-MM-ddTHH:mm:sszzz",
+            "yyyy-MM-ddTHH:mm:sszz",
+            "yyyy-MM-ddTHH:mm:ssZ",
+            // All of the above with reduced accuracy
+            "yyyyMMddTHHmmzzz",
+            "yyyyMMddTHHmmzz",
+            "yyyyMMddTHHmmZ",
+            "yyyy-MM-ddTHH:mmzzz",
+            "yyyy-MM-ddTHH:mmzz",
+            "yyyy-MM-ddTHH:mmZ",
+            // Accuracy reduced to hours
+            "yyyyMMddTHHzzz",
+            "yyyyMMddTHHzz",
+            "yyyyMMddTHHZ",
+            "yyyy-MM-ddTHHzzz",
+            "yyyy-MM-ddTHHzz",
+            "yyyy-MM-ddTHHZ"
+            };
+
+        private static DateTime ParseISO8601String(string str)
+        {
+            return DateTime.ParseExact(str, iso8601DateFormats,
+                CultureInfo.InvariantCulture, DateTimeStyles.None);
         }
     }
 }
