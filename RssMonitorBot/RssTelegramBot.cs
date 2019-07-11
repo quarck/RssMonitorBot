@@ -704,8 +704,8 @@ There is no privacy. Consider anything you send to this bot as public.
 <html>
 <header></header>
 <body>
-<h2>{item.Title}</h2>
-<b>Publication date: {item.PublicationDate:G}</b>
+<a href=""{item.Link}""><h2>{item.Title}</h2></a>
+<b>Publication date: {item.PublicationDate:yyyy-MMM-dd HH:mm}</b>
 <br>
 <br>
 {item.Description}
