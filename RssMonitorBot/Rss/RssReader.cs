@@ -62,10 +62,16 @@ namespace RssMonitorBot
                 document = null;
             }
 
-            return document != null ? ParseFeed(document) : null;
+            string origin = "RSS";
+            if (Uri.TryCreate(uri, UriKind.Absolute, out var uriObj))
+            {
+                origin = uriObj.Host;
+            }
+
+            return document != null ? ParseFeed(origin, document) : null;
         }
 
-        public RssFeed ParseFeedXml(string documentContent)
+        public RssFeed ParseFeedXml(string origin, string documentContent)
         {
             XmlDocument document = null;
             try
@@ -84,10 +90,10 @@ namespace RssMonitorBot
                 document = null;
             }
 
-            return document != null ? ParseFeed(document) : null;
+            return document != null ? ParseFeed(origin, document) : null;
         }
 
-        private RssFeed ParseRssFeed(XmlDocument document, XmlNode rss)
+        private RssFeed ParseRssFeed(string origin, XmlDocument document, XmlNode rss)
         {
             XmlNode channel = rss["channel"];
             if (channel == null || !channel.HasChildNodes)
@@ -120,7 +126,7 @@ namespace RssMonitorBot
 
                     case "item":
                         {
-                            var parsed = ParseRssItem(child);
+                            var parsed = ParseRssItem(origin, child);
                             if (parsed != null)
                                 ret.Items.Add(parsed);
                             break;
@@ -131,7 +137,7 @@ namespace RssMonitorBot
             return ret;
         }
 
-        private RssFeed ParseAtomFeed(XmlDocument document, XmlNode feed)
+        private RssFeed ParseAtomFeed(string origin, XmlDocument document, XmlNode feed)
         {
             var ret = new RssFeed();
             ret.Items = new List<RssFeedItem>();
@@ -156,7 +162,7 @@ namespace RssMonitorBot
 
                     case "entry":
                         {
-                            var parsed = ParseAtomEntry(child);
+                            var parsed = ParseAtomEntry(origin, child);
                             if (parsed != null)
                                 ret.Items.Add(parsed);
                             break;
@@ -167,7 +173,7 @@ namespace RssMonitorBot
             return ret;
         }
 
-        private RssFeed ParseFeed(XmlDocument document)
+        private RssFeed ParseFeed(string origin, XmlDocument document)
         {
             XmlNode root = document;
 
@@ -177,18 +183,18 @@ namespace RssMonitorBot
             // Try parsing as RSS
             XmlNode rss = root["rss"];
             if (rss != null && rss.HasChildNodes)
-                return ParseRssFeed(document, rss);
+                return ParseRssFeed(origin, document, rss);
 
             // Try parsing as Atom
             XmlNode feed = root["feed"];
             if (feed != null && feed.HasChildNodes)
-                return ParseAtomFeed(document, feed);
+                return ParseAtomFeed(origin, document, feed);
 
             // None matched
             return null;
         }
 
-        private RssFeedItem ParseRssItem(XmlNode node)
+        private RssFeedItem ParseRssItem(string origin, XmlNode node)
         {
             if (!node.HasChildNodes)
                 return null;
@@ -201,6 +207,7 @@ namespace RssMonitorBot
             if (title == null && description == null)
                 return null;
 
+            ret.Origin = origin;
             ret.Title = title?.InnerText ?? "";
             ret.Description = description?.InnerText ?? "";
             ret.Link = node["link"]?.InnerText ?? "";
@@ -211,7 +218,7 @@ namespace RssMonitorBot
             return ret;        
         }
 
-        private RssFeedItem ParseAtomEntry(XmlNode node)
+        private RssFeedItem ParseAtomEntry(string origin, XmlNode node)
         {
             if (!node.HasChildNodes)
                 return null;
@@ -224,6 +231,7 @@ namespace RssMonitorBot
             if (title == null && content == null)
                 return null;
 
+            ret.Origin = origin;
             ret.Title = title?.InnerText ?? "";
             ret.Description = content?.InnerText ?? "";
             ret.Link = node["link"]?.GetAttribute("href") ?? "";

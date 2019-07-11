@@ -718,7 +718,7 @@ There is no privacy. Consider anything you send to this bot as public.
 
                 await MailClient.SendMail(
                     Configuration.NOTIFICATION_EMAIL_DST,
-                    $"Rss Notification: {item.Title}",
+                    $"{item.Origin}: {item.Title}",
                     body: message,
                     isHtmlFormatted: true);
             }

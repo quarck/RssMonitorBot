@@ -20,7 +20,7 @@ namespace Tests
         [Test]
         public void TestWrongRss()
         {
-            var doc = _reader.ParseFeedXml(_badRss);
+            var doc = _reader.ParseFeedXml("test", _badRss);
             Assert.IsNull(doc);
         }
 
