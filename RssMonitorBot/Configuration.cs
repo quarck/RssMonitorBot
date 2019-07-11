@@ -37,5 +37,7 @@ namespace RssMonitorBot
         public static string API_KEY = GetArgN(2, "api key");
         public static string BOT_SECRET = GetArgN(3, "bot secret");
         public static int REFRESH_INTERVAL_SECONDS = GetArgNT<int>(4, "refresh interval", x => int.Parse(x));
+        public static bool USE_EMAIL_NOTIFICATION = GetArgNT<bool>(5, "use email notification", x => bool.Parse(x));
+        public static string NOTIFICATION_EMAIL_DST = GetArgN(6, "notification email dst");
     }
 }

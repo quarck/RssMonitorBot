@@ -1,4 +1,5 @@
-﻿using System;
+﻿using RssMonitorBot.Mail;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -695,7 +696,33 @@ There is no privacy. Consider anything you send to this bot as public.
         {
             const string ReutersLink = "http://feeds.reuters.com/";
 
-            if (!item.Link.ToLower().Contains(ReutersLink))
+            if (Configuration.USE_EMAIL_NOTIFICATION)
+            {
+                var text = item.Description;
+                // handicapt mode for ruters 
+                var message = $@"
+<html>
+<header></header>
+<body>
+<h2>{item.Title}</h2>
+<b>Publication date: {item.PublicationDate:G}</b>
+<br>
+<br>
+{item.Description}
+<br>
+<br>
+<a href=""{item.Link}"">Read More</a>
+</body>
+</html>
+";
+
+                await MailClient.SendMail(
+                    Configuration.NOTIFICATION_EMAIL_DST,
+                    $"Rss Notification: {item.Title}",
+                    body: message,
+                    isHtmlFormatted: true);
+            }
+            else if (!item.Link.ToLower().Contains(ReutersLink))
             {
                 var message = $"[{item.Title}]({item.Link})";
 
