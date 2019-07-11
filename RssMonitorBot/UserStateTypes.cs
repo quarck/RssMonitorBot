@@ -60,7 +60,7 @@ namespace RssMonitorBot
     public class UserFeedPubDates
     {
         [NonSerialized]
-        private static int MAX_RECENTS = 500;
+        private static int MAX_RECENTS = 10000;
 
         public SerializableDictionary<string, DateTime> PubDates; // feed URI as a key
         public List<string> RecentLinks;
