@@ -18,7 +18,9 @@ namespace RssMonitorBot
             var logfile = new NLog.Targets.FileTarget("logfile") {
                 FileName = path,
                 FileNameKind = NLog.Targets.FilePathKind.Absolute, 
-                Layout = "${longdate} ${level:uppercase=true} ${logger}: ${message} ${exception:format=tostring}"
+                Layout = "${longdate} ${level:uppercase=true} ${logger}: ${message} ${exception:format=tostring}", 
+                ArchiveAboveSize = 1024 * 1024 * 8, 
+                MaxArchiveFiles = 10
             };
 
             var logconsole = new NLog.Targets.ConsoleTarget("logconsole")

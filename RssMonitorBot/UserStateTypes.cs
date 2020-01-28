@@ -5,6 +5,7 @@ using System.Text;
 using System.Xml;
 using System.Xml.Schema;
 using System.Xml.Serialization;
+using System.Linq;
 
 namespace RssMonitorBot
 {
@@ -55,6 +56,25 @@ namespace RssMonitorBot
     }
 
 
+    [Serializable]
+    public class RecentNotificationEntry
+    {
+        public string Date;
+        public string Title;
+        public string Content;
+
+        public RecentNotificationEntry(string d, string t, string c)
+        {
+            Date = d;
+            Title = t;
+            Content = c;
+        }
+
+        public RecentNotificationEntry()
+        {
+            Date = ""; Title = ""; Content = "";
+        }
+    }
 
     [Serializable]
     public class UserFeedPubDates
@@ -64,6 +84,7 @@ namespace RssMonitorBot
 
         public SerializableDictionary<string, DateTime> PubDates; // feed URI as a key
         public List<string> RecentLinks;
+        public List<RecentNotificationEntry> RecentNotifications;
 
         public void AddRecentLink(string url)
         {
@@ -80,11 +101,39 @@ namespace RssMonitorBot
             RecentLinks.Add(url);
         }
 
+        private string todayDateAsString()
+        {
+            return DateTime.Today.ToString("ddMMyyyy");
+        }
+
+        public void AddRecentNotification(string title, string content)
+        {
+            if (RecentNotifications == null)
+            {
+                RecentNotifications = new List<RecentNotificationEntry>();
+            }
+
+            if (RecentNotifications.Count == MAX_RECENTS)
+            {
+                RecentNotifications.RemoveAt(0);
+            }
+
+            RecentNotifications.Add(new RecentNotificationEntry(todayDateAsString(), title, content));
+        }
+
         public bool IsRecent(string url)
         {
             if (RecentLinks == null)
                 return false;
             return RecentLinks.Contains(url);
+        }
+
+        public bool IsRecentNotification(string title, string content)
+        {
+            if (RecentNotifications == null)
+                return false;
+            var today = todayDateAsString();
+            return RecentNotifications.Any(x => x.Date == today && x.Title == title && x.Content == content);
         }
     }
 }

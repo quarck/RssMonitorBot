@@ -134,6 +134,15 @@ namespace RssMonitorBot
                 }
             }
 
+            foreach (var i in ret.Items)
+            {
+                if (i.PublicationDate > ret.LastBuildDate)
+                    ret.LastBuildDate = i.PublicationDate;
+
+                if (i.PublicationDate > ret.PublicationDate)
+                    ret.PublicationDate = i.PublicationDate;
+            }
+
             return ret;
         }
 
@@ -170,6 +179,15 @@ namespace RssMonitorBot
                 }
             }
 
+            foreach (var i in ret.Items)
+            {
+                if (i.PublicationDate > ret.LastBuildDate)
+                    ret.LastBuildDate = i.PublicationDate;
+
+                if (i.PublicationDate > ret.PublicationDate)
+                    ret.PublicationDate = i.PublicationDate;
+            }
+
             return ret;
         }
 
@@ -203,13 +221,14 @@ namespace RssMonitorBot
 
             var title = node["title"];
             var description = node["description"];
+            var richDescription = node["content:encoded"];
 
-            if (title == null && description == null)
+            if (title == null && description == null && richDescription == null)
                 return null;
 
             ret.Origin = origin;
             ret.Title = title?.InnerText ?? "";
-            ret.Description = description?.InnerText ?? "";
+            ret.Description = richDescription ?.InnerText ?? description?.InnerText ?? "";
             ret.Link = node["link"]?.InnerText ?? "";
             ret.PublicationDate = ParseRssDate(node["pubDate"]?.InnerText ?? "");
             ret.Guid = node["guid"]?.InnerText ?? "";
@@ -260,6 +279,9 @@ namespace RssMonitorBot
                 {
                     tz = tz.Substring(0, tzLen - 2) + ":" + tz.Substring(tzLen - 2);
                 }
+
+                if (tz == "GMT" || tz == "UTC" || tz == "DUB")
+                    tz = "+0000";
 
                 if (DateTime.TryParseExact($"{day} {month} {year} {time} {tz}",
                     "dd MMM yyyy HH:mm:ss zzzz",

@@ -683,7 +683,15 @@ There is no privacy. Consider anything you send to this bot as public.
 
                     if (hasKeywords)
                     {
+                        if (rssPubDates.Data.IsRecentNotification(item.Title, item.Description))
+                        {
+                            logger.Info($"User {user.UserId}, feed {feedInfo.Url}: user has seen this recently, skipping: {item.Link} - skipped by the notification content that was sent today");
+                            continue;
+                        }
+
                         rssPubDates.Data.AddRecentLink(item.Link);
+                        rssPubDates.Data.AddRecentNotification(item.Title, item.Description);
+
                         await SendRssItem(user, item, isMuted);
                     }
                 }
@@ -700,17 +708,26 @@ There is no privacy. Consider anything you send to this bot as public.
             {
                 var text = item.Description;
                 // handicapt mode for ruters 
+
+                var origin =
+                    item.Origin
+                        .Replace("meduza.io", "meduza")
+                        .Replace("feeds.reuters.com", "reuters")
+                        .Replace("feeds.feedburner.com", "feedburner")
+                        .Replace("www.rte.ie", "RTE")
+                        .Replace("www.xkcd.com", "xkcd");
+
                 var message = $@"
 <html>
 <header></header>
 <body>
 <a href=""{item.Link}""><h2>{item.Title}</h2></a>
 <b>Publication date: {item.PublicationDate:yyyy-MMM-dd HH:mm}</b>
-<br>
-<br>
+<br/>
+<br/>
 {item.Description}
-<br>
-<br>
+<br/>
+<br/>
 <a href=""{item.Link}"">Read More</a>
 </body>
 </html>
@@ -718,7 +735,7 @@ There is no privacy. Consider anything you send to this bot as public.
 
                 await MailClient.SendMail(
                     Configuration.NOTIFICATION_EMAIL_DST,
-                    $"{item.Origin}: {item.Title}",
+                    $"{origin}: {item.Title}",
                     body: message,
                     isHtmlFormatted: true);
             }

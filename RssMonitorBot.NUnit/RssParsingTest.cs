@@ -31,5 +31,28 @@ namespace Tests
             var doc = task.Result;
             Assert.IsNotNull(doc);
         }
+
+        [Test]
+        public void TestMorningBrewAtom()
+        {
+            Task<RssFeed> task = _reader.FetchAndParse("http://feeds.feedburner.com/ReflectivePerspective");
+            var doc = task.Result;
+            Assert.IsNotNull(doc);
+        }
+
+        [Test]
+        public void TestIsoCpp()
+        {
+            // 
+        }
+
+        [Test]
+        public void TestMetIe()
+        { 
+            Task<RssFeed> task = _reader.FetchAndParse("https://www.met.ie/warningsxml/rss.xml");
+            var doc = task.Result;
+            Assert.IsNotNull(doc);
+
+        }
     }
 }
